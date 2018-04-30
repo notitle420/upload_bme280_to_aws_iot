@@ -1,2 +1,4 @@
 /build/
 /main/certs/
+sdkconfig
+sdkconfig.old

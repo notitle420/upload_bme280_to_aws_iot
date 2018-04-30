@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <string.h>
+#include <cJSON.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -360,8 +361,6 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
   void aws_iot_task(void *param) {
     char cPayload[100];
 
-    int32_t i = 0;
-
     IoT_Error_t rc = FAILURE;
 
     AWS_IoT_Client client;
@@ -469,9 +468,12 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
       com_rslt += bme280_set_filter(BME280_FILTER_COEFF_8);
       com_rslt += bme280_set_power_mode(BME280_NORMAL_MODE);
 
-      const char *TOPIC = "BME280/data";
-      const int TOPIC_LEN = strlen(TOPIC);
-
+      const char *topic_tempreture = "BME280/tempreture";
+      const int TOPIC_LEN_TEMPRETURE = strlen(topic_tempreture);
+      const char *topic_prresure = "BME280/pressure";
+      const int TOPIC_LEN_PRRESURE = strlen(topic_prresure);
+      const char *topic_humidity= "BME280/humidity";
+      const int TOPIC_LEN_HUMIDITY = strlen(topic_humidity);
 
       // ESP_LOGI(TAG, "Subscribing...");
       // rc = aws_iot_mqtt_subscribe(&client, TOPIC, TOPIC_LEN, QOS0, iot_subscribe_callback_handler, NULL);
@@ -482,13 +484,14 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
 
       //sprintf(cPayload, "%s : %d ", "hello from SDK", i);
 
-      paramsQOS0.qos = QOS0;
-      paramsQOS0.payload = (void *) cPayload;
-      paramsQOS0.isRetained = 0;
+      // paramsQOS0.qos = QOS0;
+      // paramsQOS0.payload = (void *) cPayload;
+      // paramsQOS0.isRetained = 0;
 
       paramsQOS1.qos = QOS1;
       paramsQOS1.payload = (void *) cPayload;
       paramsQOS1.isRetained = 0;
+      cJSON *root = NULL;
 
       while((NETWORK_ATTEMPTING_RECONNECT == rc || NETWORK_RECONNECTED == rc || SUCCESS == rc) && com_rslt == SUCCESS) {
 
@@ -512,24 +515,58 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
           }
 
           ESP_LOGI(TAG, "Stack remaining for task '%s' is %d bytes", pcTaskGetTaskName(NULL), uxTaskGetStackHighWaterMark(NULL));
-          vTaskDelay(1000 / portTICK_RATE_MS);
-          sprintf(cPayload, "%.2f degC / %.3g hPa / %.3f %%",
-          bme280_compensate_temperature_double(v_uncomp_temperature_s32),
-          bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100, // Pa -> hPa
-          bme280_compensate_humidity_double(v_uncomp_humidity_s32));
-          paramsQOS0.payloadLen = strlen(cPayload);
-          rc = aws_iot_mqtt_publish(&client, TOPIC, TOPIC_LEN, &paramsQOS0);
+          // vTaskDelay(1000 / portTICK_RATE_MS);
+          // sprintf(cPayload, "%.2f degC / %.3g hPa / %.3f %%",
+          // bme280_compensate_temperature_double(v_uncomp_temperature_s32),
+          // bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100, // Pa -> hPa
+          // bme280_compensate_humidity_double(v_uncomp_humidity_s32));
+          // paramsQOS0.payloadLen = strlen(cPayload);
+          // rc = aws_iot_mqtt_publish(&client, TOPIC, TOPIC_LEN, &paramsQOS0);
 
-          sprintf(cPayload, "%.2f degC / %.3g hPa / %.3f %%",
-          bme280_compensate_temperature_double(v_uncomp_temperature_s32),
-          bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100, // Pa -> hPa
-          bme280_compensate_humidity_double(v_uncomp_humidity_s32));
+
+          //sprintf(cPayload, "value : %.2f",
+          //bme280_compensate_temperature_double(v_uncomp_temperature_s32)); // Pa -> hPa
+
+          root = cJSON_CreateObject();
+          cJSON_AddNumberToObject(root, "value", bme280_compensate_temperature_double(v_uncomp_temperature_s32));
+          sprintf(cPayload,"%s",cJSON_Print(root));
           paramsQOS1.payloadLen = strlen(cPayload);
-          rc = aws_iot_mqtt_publish(&client, TOPIC, TOPIC_LEN, &paramsQOS1);
+          rc = aws_iot_mqtt_publish(&client, topic_tempreture, TOPIC_LEN_TEMPRETURE, &paramsQOS1);
           if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
               ESP_LOGW(TAG, "QOS1 publish ack not received.");
               rc = SUCCESS;
           }
+          cJSON_Delete(root);
+
+
+          root = cJSON_CreateObject();
+          cJSON_AddNumberToObject(root, "value", bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100);
+          sprintf(cPayload,"%s",cJSON_Print(root));
+          // sprintf(cPayload, "value : %.3f",
+          // bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100);
+          paramsQOS1.payloadLen = strlen(cPayload);
+          rc = aws_iot_mqtt_publish(&client, topic_prresure, TOPIC_LEN_PRRESURE, &paramsQOS1);
+          if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
+              ESP_LOGW(TAG, "QOS1 publish ack not received.");
+              rc = SUCCESS;
+          }
+          cJSON_Delete(root);
+
+          root = cJSON_CreateObject();
+          cJSON_AddNumberToObject(root, "value", bme280_compensate_humidity_double(v_uncomp_humidity_s32)/100);
+          // sprintf(cPayload, "value : %.2f",
+          // bme280_compensate_humidity_double(v_uncomp_humidity_s32));
+          sprintf(cPayload,"%s",cJSON_Print(root));
+          paramsQOS1.payloadLen = strlen(cPayload);
+          rc = aws_iot_mqtt_publish(&client, topic_humidity, TOPIC_LEN_HUMIDITY, &paramsQOS1);
+          if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
+              ESP_LOGW(TAG, "QOS1 publish ack not received.");
+              rc = SUCCESS;
+          }
+          cJSON_Delete(root);
+
+          vTaskDelay(5000/ portTICK_RATE_MS);
+
         }
         ESP_LOGE(TAG_BME280, "init or setting error. code: %d", com_rslt);
         ESP_LOGE(TAG, "An error occurred in the main loop.");

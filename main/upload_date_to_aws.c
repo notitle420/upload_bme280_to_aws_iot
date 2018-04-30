@@ -412,7 +412,7 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
           //bme280_compensate_temperature_double(v_uncomp_temperature_s32)); // Pa -> hPa
 
           /*
-          rootというJSONを作成し、データを格納しパブリッシュしています
+          rootというJSONを作成し、データを格納しパブリッシュしています.
           */
           root = cJSON_CreateObject();
           cJSON_AddNumberToObject(root, "value", bme280_compensate_temperature_double(v_uncomp_temperature_s32));

@@ -348,12 +348,8 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
       com_rslt += bme280_set_power_mode(BME280_NORMAL_MODE);
 
       //AWS内のトピック設定
-      const char *topic_tempreture = "BME280/tempreture";
-      const int TOPIC_LEN_TEMPRETURE = strlen(topic_tempreture);
-      const char *topic_prresure = "BME280/pressure";
-      const int TOPIC_LEN_PRRESURE = strlen(topic_prresure);
-      const char *topic_humidity= "BME280/humidity";
-      const int TOPIC_LEN_HUMIDITY = strlen(topic_humidity);
+      const char *topic = "BME280/data/";
+      const int TOPIC_LEN = strlen(topic);
 
       //subscribing
       // ESP_LOGI(TAG, "Subscribing...");
@@ -415,44 +411,28 @@ void iot_subscribe_callback_handler(AWS_IoT_Client *pClient, char *topicName, ui
           rootというJSONを作成し、データを格納しパブリッシュしています
           */
           root = cJSON_CreateObject();
-          cJSON_AddNumberToObject(root, "value", bme280_compensate_temperature_double(v_uncomp_temperature_s32));
+          int int_tmp = bme280_compensate_temperature_double(v_uncomp_temperature_s32)*100;
+          double double_tmp = int_tmp/100.00;
+          cJSON_AddNumberToObject(root, "tempreture", double_tmp);
+          int_tmp = bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100*100;
+          double_tmp = int_tmp/100.00;
+          cJSON_AddNumberToObject(root, "pressure", double_tmp);
+          int_tmp = bme280_compensate_humidity_double(v_uncomp_humidity_s32)*100;
+          double_tmp = int_tmp/100.00;
+          cJSON_AddNumberToObject(root, "humidity", double_tmp);
           sprintf(cPayload,"%s",cJSON_Print(root));
           paramsQOS1.payloadLen = strlen(cPayload);
-          rc = aws_iot_mqtt_publish(&client, topic_tempreture, TOPIC_LEN_TEMPRETURE, &paramsQOS1);
+          rc = aws_iot_mqtt_publish(&client, topic, TOPIC_LEN, &paramsQOS1);
           if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
               ESP_LOGW(TAG, "QOS1 publish ack not received.");
               rc = SUCCESS;
           }
+
+          ESP_LOGE(TAG_BME280,"%s",cPayload);
+
           cJSON_Delete(root);
 
-
-          root = cJSON_CreateObject();
-          cJSON_AddNumberToObject(root, "value", bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100);
-          sprintf(cPayload,"%s",cJSON_Print(root));
-          // sprintf(cPayload, "value : %.3f",
-          // bme280_compensate_pressure_double(v_uncomp_pressure_s32)/100);
-          paramsQOS1.payloadLen = strlen(cPayload);
-          rc = aws_iot_mqtt_publish(&client, topic_prresure, TOPIC_LEN_PRRESURE, &paramsQOS1);
-          if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
-              ESP_LOGW(TAG, "QOS1 publish ack not received.");
-              rc = SUCCESS;
-          }
-          cJSON_Delete(root);
-
-          root = cJSON_CreateObject();
-          cJSON_AddNumberToObject(root, "value", bme280_compensate_humidity_double(v_uncomp_humidity_s32)/100);
-          // sprintf(cPayload, "value : %.2f",
-          // bme280_compensate_humidity_double(v_uncomp_humidity_s32));
-          sprintf(cPayload,"%s",cJSON_Print(root));
-          paramsQOS1.payloadLen = strlen(cPayload);
-          rc = aws_iot_mqtt_publish(&client, topic_humidity, TOPIC_LEN_HUMIDITY, &paramsQOS1);
-          if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
-              ESP_LOGW(TAG, "QOS1 publish ack not received.");
-              rc = SUCCESS;
-          }
-          cJSON_Delete(root);
-
-          vTaskDelay(5000/ portTICK_RATE_MS);
+          vTaskDelay(30000/ portTICK_RATE_MS);
 
         }
         ESP_LOGE(TAG_BME280, "init or setting error. code: %d", com_rslt);
